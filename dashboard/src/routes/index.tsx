@@ -1,5 +1,11 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useState } from "react";
+import { useCallback, useEffect, useState } from "react";
+import {
+  API_BASE_URL,
+  checkHealth,
+  sendCommand,
+  type CommandResponse,
+} from "@/services/api";
 
 export const Route = createFileRoute("/")({
   component: Index,
@@ -15,7 +21,7 @@ export const Route = createFileRoute("/")({
       {
         property: "og:description",
         content:
-          "Run forensic commands and view mock execution results in a modern dark-themed interface.",
+          "Run forensic commands and view execution results in a modern dark-themed interface.",
       },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary_large_image" },
@@ -40,39 +46,64 @@ const INITIAL_RECENT: RecentCommand[] = [
   { command: "LIST FILES", status: "Success" },
 ];
 
-function getMockOutput(command: string): string {
-  const normalized = command.toLowerCase();
-  if (normalized.includes("hash file")) {
-    return "SHA-256: a3f5c91d8b7e6c4d2f0a8e1b9c7d5e3f1a2b4c6d8e0f2a4b6c8d0e2f4a6b8c0d1e3";
-  }
-  if (normalized.includes("system info")) {
-    return "OS: Linux x86_64\nCPU: 8 cores\nMemory: 16 GB\nUptime: 3d 12h 45m";
-  }
-  if (normalized.includes("list files")) {
-    return "evidence.txt\nimage.png\nlogs/\ncase_notes.md\nregistry.dump";
-  }
-  return "Command executed successfully. (Mock output)";
-}
-
 function Index() {
   const [command, setCommand] = useState("");
   const [result, setResult] = useState<CommandResult | null>(null);
   const [recent, setRecent] = useState<RecentCommand[]>(INITIAL_RECENT);
+  const [loading, setLoading] = useState(false);
+  const [apiConnected, setApiConnected] = useState(false);
+  const [apiError, setApiError] = useState<string | null>(null);
 
-  const handleExecute = () => {
+  const refreshHealth = useCallback(async () => {
+    const healthy = await checkHealth();
+    setApiConnected(healthy);
+    return healthy;
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    const run = () => {
+      checkHealth().then((healthy) => {
+        if (!cancelled) setApiConnected(healthy);
+      });
+    };
+    run();
+    const interval = setInterval(run, 15_000);
+    return () => {
+      cancelled = true;
+      clearInterval(interval);
+    };
+  }, []);
+
+  const handleExecute = async () => {
     const trimmed = command.trim();
     if (!trimmed) return;
 
-    setResult({
-      status: "Success",
-      command: trimmed,
-      output: getMockOutput(trimmed),
-    });
+    setLoading(true);
+    setApiError(null);
 
-    setRecent((prev) => {
-      const next = [{ command: trimmed, status: "Success" }, ...prev];
-      return next.slice(0, 6);
-    });
+    try {
+      const data: CommandResponse = await sendCommand(trimmed);
+
+      setApiConnected(true);
+      setResult({
+        status: data.status ?? "Success",
+        command: data.command ?? trimmed,
+        output: data.output ?? "",
+      });
+
+      setRecent((prev) => {
+        const next = [{ command: trimmed, status: data.status ?? "Success" }, ...prev];
+        return next.slice(0, 6);
+      });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Could not reach the Flask API.";
+      setApiError(message);
+      setResult(null);
+      void refreshHealth();
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
@@ -90,8 +121,11 @@ function Index() {
             <p className="text-xs text-muted-foreground">Digital Forensics Tool</p>
           </div>
           <div className="flex items-center gap-2 text-sm text-muted-foreground">
-            <span className="h-2 w-2 rounded-full bg-primary" aria-hidden="true" />
-            <span>API Connected</span>
+            <span
+              className={`h-2 w-2 rounded-full ${apiConnected ? "bg-primary" : "bg-destructive"}`}
+              aria-hidden="true"
+            />
+            <span>{apiConnected ? "API Connected" : "API Disconnected"}</span>
           </div>
         </div>
       </nav>
@@ -123,9 +157,10 @@ function Index() {
             />
             <button
               onClick={handleExecute}
-              className="mt-4 inline-flex items-center justify-center rounded-lg bg-primary px-6 py-2.5 text-sm font-semibold text-primary-foreground transition-colors hover:bg-primary/90 focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 focus:ring-offset-background"
+              disabled={loading}
+              className="mt-4 inline-flex items-center justify-center rounded-lg bg-primary px-6 py-2.5 text-sm font-semibold text-primary-foreground transition-colors hover:bg-primary/90 focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 focus:ring-offset-background disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              Execute Command
+              {loading ? "Executing..." : "Execute Command"}
             </button>
 
             <div className="mt-6">
@@ -142,7 +177,14 @@ function Index() {
 
           <section className="rounded-xl border border-border bg-card p-5 shadow-sm sm:p-6">
             <h3 className="mb-4 text-lg font-semibold text-card-foreground">Execution Result</h3>
-            {result ? (
+            {apiError ? (
+              <div className="space-y-1">
+                <p className="text-sm text-destructive">{apiError}</p>
+                <p className="text-xs text-muted-foreground">
+                  API base URL: <span className="font-mono">{API_BASE_URL}</span>
+                </p>
+              </div>
+            ) : result ? (
               <div className="space-y-3">
                 <div className="flex items-center gap-2 text-sm">
                   <span className="text-muted-foreground">Status:</span>

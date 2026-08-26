@@ -1,6 +1,8 @@
 from flask import Flask, request
+from flask_cors import CORS
 
 app = Flask(__name__)
+CORS(app)
 
 
 @app.route("/health", methods=["GET"])
@@ -12,20 +14,29 @@ def health():
 
 @app.route("/command", methods=["POST"])
 def command():
+    data = request.get_json(silent=True) or {}
 
-    data = request.json
+    command_text = data.get("command", "").strip()
 
-    print("Received:")
-    print(data)
+    if not command_text:
+        return {
+            "status": "error",
+            "error": "Command cannot be empty"
+        }, 400
 
     return {
-        "status": "received",
-        "data": data
+        "status": "success",
+        "command": command_text,
+        "result": {
+            "message": "Command received successfully"
+        },
+        "error": None
     }
 
 
 if __name__ == "__main__":
     app.run(
         host="127.0.0.1",
-        port=5000
+        port=5000,
+        debug=True
     )
