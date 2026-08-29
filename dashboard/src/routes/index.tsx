@@ -41,9 +41,6 @@ type RecentCommand = {
 };
 
 const INITIAL_RECENT: RecentCommand[] = [
-  { command: "HASH FILE evidence.txt", status: "Success" },
-  { command: "SYSTEM INFO", status: "Success" },
-  { command: "LIST FILES", status: "Success" },
 ];
 
 function Index() {
@@ -180,9 +177,6 @@ function Index() {
             {apiError ? (
               <div className="space-y-1">
                 <p className="text-sm text-destructive">{apiError}</p>
-                <p className="text-xs text-muted-foreground">
-                  API base URL: <span className="font-mono">{API_BASE_URL}</span>
-                </p>
               </div>
             ) : result ? (
               <div className="space-y-3">
