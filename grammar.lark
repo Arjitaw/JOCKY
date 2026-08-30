@@ -1,0 +1,25 @@
+start:command+
+
+?command: hash_command
+        | encrypt_command
+        | system_command
+        | list_command
+        | processes_command
+        | search_file_command
+
+hash_command:"HASH" "FILE" PATH
+
+encrypt_command:"ENCRYPT" "FILE" PATH
+
+list_command:"LIST" "FILES" PATH
+
+system_command:"SYSTEM" "INFO"
+
+processes_command:"PROCESSES"
+
+search_file_command:"SEARCH" "FILE" PATH "IN" PATH
+
+PATH:  /[^\s]+/
+
+%import common.WS
+%ignore WS
