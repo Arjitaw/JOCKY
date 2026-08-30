@@ -1,7 +1,7 @@
 // JOCKY -> local Flask API connector.
 // Base URL is configurable so the same build works when the Flask host/port changes.
 // Set VITE_API_BASE_URL in .env to override the default.
-const DEFAULT_BASE_URL = "http://192.168.1.6:5000";
+const DEFAULT_BASE_URL = "http://localhost:5000";
 
 export const API_BASE_URL: string = (
   (import.meta.env["VITE_API_BASE_URL"] as string | undefined) ?? DEFAULT_BASE_URL

@@ -1,6 +1,9 @@
 from flask import Flask, request
 from flask_cors import CORS
 
+from compiler.parser import parse_command
+from communication.dispatcher import execute_command
+
 app = Flask(__name__)
 CORS(app)
 
@@ -24,14 +27,29 @@ def command():
             "error": "Command cannot be empty"
         }, 400
 
-    return {
-        "status": "success",
-        "command": command_text,
-        "result": {
-            "message": "Command received successfully"
-        },
-        "error": None
-    }
+    try:
+        print("Received:", command_text)
+
+        parsed = parse_command(command_text)
+        print("Parsed:", parsed)
+
+        result = execute_command(parsed)
+
+        return {
+            "status": "success",
+            "command": command_text,
+            "result": result,
+            "error": None
+        }
+
+    except Exception as error:
+        print("ERROR:", error)
+
+        return {
+            "status": "error",
+            "command": command_text,
+            "error": str(error)
+        }, 400
 
 
 if __name__ == "__main__":

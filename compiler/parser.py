@@ -19,4 +19,3 @@ def parse_command(command):
 
     return transformer.transform(tree)
 
-print(parse_command("SYSTEM INFO"))
