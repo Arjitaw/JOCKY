@@ -18,5 +18,3 @@ def parse_command(command):
     transformer = JockyTransformer()
 
     return transformer.transform(tree)
-
-print(parse_command("SYSTEM INFO"))
