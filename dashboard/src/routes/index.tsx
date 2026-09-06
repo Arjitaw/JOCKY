@@ -1,227 +1,151 @@
-import { createFileRoute } from "@tanstack/react-router";
-import { useCallback, useEffect, useState } from "react";
+import { createFileRoute, Link } from "@tanstack/react-router";
 import {
-  API_BASE_URL,
-  checkHealth,
-  sendCommand,
-  type CommandResponse,
-} from "@/services/api";
+  Activity,
+  ArrowRight,
+  FileText,
+  FolderSearch,
+  Gauge,
+  ScanSearch,
+  ServerCog,
+  ShieldCheck,
+} from "lucide-react";
+import { AppShell } from "@/components/layout/app-shell";
+import { MetricCard } from "@/components/layout/metric-card";
+import { StatusPill } from "@/components/layout/status-pill";
+import { CommandConsole } from "@/components/forensics/command-console";
+import { Button } from "@/components/ui/button";
+import { formatRelativeTime } from "@/lib/format";
+import { useJockyStore } from "@/lib/store";
 
 export const Route = createFileRoute("/")({
-  component: Index,
+  component: Overview,
   head: () => ({
     meta: [
-      { title: "JOCKY — Digital Forensics Command Center" },
+      { title: "Overview — JOCKY" },
       {
         name: "description",
         content:
-          "JOCKY is a digital forensics command-line tool with a clean graphical interface for analyzing evidence.",
+          "Forensic operations dashboard: engine status, analysis counters, and the command launcher.",
       },
-      { property: "og:title", content: "JOCKY — Digital Forensics Command Center" },
-      {
-        property: "og:description",
-        content:
-          "Run forensic commands and view execution results in a modern dark-themed interface.",
-      },
-      { property: "og:type", content: "website" },
-      { name: "twitter:card", content: "summary_large_image" },
     ],
   }),
 });
 
-type CommandResult = {
-  status: string;
-  command: string;
-  output: string;
-};
+const FILE_ACTIONS = new Set(["hash", "search", "list"]);
 
-type RecentCommand = {
-  command: string;
-  status: string;
-};
+function Overview() {
+  const { history, reports, investigations, apiConnected } = useJockyStore();
 
-const INITIAL_RECENT: RecentCommand[] = [
-];
-
-function Index() {
-  const [command, setCommand] = useState("");
-  const [result, setResult] = useState<CommandResult | null>(null);
-  const [recent, setRecent] = useState<RecentCommand[]>(INITIAL_RECENT);
-  const [loading, setLoading] = useState(false);
-  const [apiConnected, setApiConnected] = useState(false);
-  const [apiError, setApiError] = useState<string | null>(null);
-
-  const refreshHealth = useCallback(async () => {
-    const healthy = await checkHealth();
-    setApiConnected(healthy);
-    return healthy;
-  }, []);
-
-  useEffect(() => {
-    let cancelled = false;
-    const run = () => {
-      checkHealth().then((healthy) => {
-        if (!cancelled) setApiConnected(healthy);
-      });
-    };
-    run();
-    const interval = setInterval(run, 15_000);
-    return () => {
-      cancelled = true;
-      clearInterval(interval);
-    };
-  }, []);
-
-  const handleExecute = async () => {
-    const trimmed = command.trim();
-    if (!trimmed) return;
-
-    setLoading(true);
-    setApiError(null);
-
-    try {
-      const data: CommandResponse = await sendCommand(trimmed);
-
-      setApiConnected(true);
-      setResult({
-        status: data.status ?? "Success",
-        command: data.command ?? trimmed,
-        output: data.output ?? "",
-      });
-
-      setRecent((prev) => {
-        const next = [{ command: trimmed, status: data.status ?? "Success" }, ...prev];
-        return next.slice(0, 6);
-      });
-    } catch (err) {
-      const message = err instanceof Error ? err.message : "Could not reach the Flask API.";
-      setApiError(message);
-      setResult(null);
-      void refreshHealth();
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === "Enter") {
-      handleExecute();
-    }
-  };
+  const filesAnalyzed = reports.filter((r) => r.action && FILE_ACTIONS.has(r.action)).length;
+  const recentHistory = history.slice(0, 6);
 
   return (
-    <div className="flex min-h-screen flex-col bg-background text-foreground">
-      <nav className="sticky top-0 z-10 border-b border-border bg-background/80 backdrop-blur">
-        <div className="mx-auto flex max-w-4xl items-center justify-between px-4 py-4">
-          <div>
-            <h1 className="text-xl font-bold tracking-tight text-foreground">JOCKY</h1>
-            <p className="text-xs text-muted-foreground">Digital Forensics Tool</p>
+    <AppShell title="Overview" description="Forensic operations dashboard">
+      <div className="space-y-8">
+        <section>
+          <div className="mb-4 flex items-baseline justify-between">
+            <h2 className="text-sm font-medium text-muted-foreground">Operations Status</h2>
           </div>
-          <div className="flex items-center gap-2 text-sm text-muted-foreground">
-            <span
-              className={`h-2 w-2 rounded-full ${apiConnected ? "bg-primary" : "bg-destructive"}`}
-              aria-hidden="true"
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
+            <div className="col-span-2 flex items-center justify-between rounded-xl border border-border bg-card p-4 sm:col-span-1">
+              <div>
+                <p className="text-[10.5px] font-medium uppercase tracking-wider text-muted-foreground">
+                  System Status
+                </p>
+                <div className="mt-2.5">
+                  <StatusPill
+                    tone={apiConnected === null ? "muted" : apiConnected ? "success" : "critical"}
+                    label={
+                      apiConnected === null ? "CHECKING" : apiConnected ? "OPERATIONAL" : "DEGRADED"
+                    }
+                    pulse={apiConnected === true}
+                  />
+                </div>
+              </div>
+              <ShieldCheck
+                className={
+                  "h-8 w-8 " + (apiConnected ? "text-success/70" : "text-muted-foreground/40")
+                }
+                strokeWidth={1.5}
+              />
+            </div>
+            <MetricCard
+              label="API Status"
+              value={apiConnected === null ? "…" : apiConnected ? "Online" : "Offline"}
+              icon={ServerCog}
+              tone={apiConnected ? "success" : "critical"}
             />
-            <span>{apiConnected ? "API Connected" : "API Disconnected"}</span>
+            <MetricCard
+              label="JOCKY Engine"
+              value={apiConnected ? "Online" : "Standby"}
+              icon={Gauge}
+              tone={apiConnected ? "success" : "warning"}
+            />
+            <MetricCard
+              label="Active Investigations"
+              value={investigations.length}
+              icon={FolderSearch}
+            />
+            <MetricCard label="Analysis Count" value={history.length} icon={Activity} />
+            <MetricCard label="Report Count" value={reports.length} icon={FileText} />
+            <MetricCard label="Files Analyzed" value={filesAnalyzed} icon={ScanSearch} />
           </div>
-        </div>
-      </nav>
+        </section>
 
-      <main className="mx-auto w-full max-w-4xl flex-1 px-4 py-8 sm:py-12">
-        <div className="mb-8 space-y-2 sm:mb-10">
-          <h2 className="text-3xl font-bold tracking-tight text-foreground sm:text-4xl">
-            Digital Forensics Command Center
-          </h2>
-          <p className="text-base text-muted-foreground sm:text-lg">
-            &ldquo;Analyze digital evidence using simple JOCKY forensic commands.&rdquo;
-          </p>
-        </div>
-
-        <div className="grid gap-6">
-          <section className="rounded-xl border border-border bg-card p-5 shadow-sm sm:p-6">
-            <h3 className="mb-4 text-lg font-semibold text-card-foreground">Command Center</h3>
-            <label htmlFor="command" className="mb-2 block text-sm font-medium text-card-foreground">
-              Enter JOCKY Command
-            </label>
-            <input
-              id="command"
-              type="text"
-              value={command}
-              onChange={(e) => setCommand(e.target.value)}
-              onKeyDown={handleKeyDown}
-              placeholder="HASH FILE evidence.txt"
-              className="w-full rounded-lg border border-input bg-background px-4 py-3 text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary"
-            />
-            <button
-              onClick={handleExecute}
-              disabled={loading}
-              className="mt-4 inline-flex items-center justify-center rounded-lg bg-primary px-6 py-2.5 text-sm font-semibold text-primary-foreground transition-colors hover:bg-primary/90 focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 focus:ring-offset-background disabled:opacity-50 disabled:cursor-not-allowed"
+        <section>
+          <div className="mb-4 flex items-baseline justify-between">
+            <h2 className="text-sm font-medium text-muted-foreground">Command Launcher</h2>
+            <Link
+              to="/command-center"
+              className="inline-flex items-center gap-1 text-xs text-primary hover:underline"
             >
-              {loading ? "Executing..." : "Execute Command"}
-            </button>
+              Open Command Center
+              <ArrowRight className="h-3 w-3" />
+            </Link>
+          </div>
+          <CommandConsole variant="compact" />
+        </section>
 
-            <div className="mt-6">
-              <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                Examples
-              </p>
-              <ul className="space-y-1 text-sm text-muted-foreground">
-                <li className="font-mono">HASH FILE evidence.txt</li>
-                <li className="font-mono">SYSTEM INFO</li>
-                <li className="font-mono">LIST FILES</li>
-              </ul>
+        <section>
+          <div className="mb-4 flex items-baseline justify-between">
+            <h2 className="text-sm font-medium text-muted-foreground">Recent Activity</h2>
+            <Link to="/history">
+              <Button variant="ghost" size="sm" className="h-7 gap-1 text-xs text-muted-foreground">
+                View all
+                <ArrowRight className="h-3 w-3" />
+              </Button>
+            </Link>
+          </div>
+          {recentHistory.length === 0 ? (
+            <p className="rounded-xl border border-dashed border-border px-4 py-8 text-center text-xs text-muted-foreground">
+              No commands executed yet. Run one from the launcher above to see activity here.
+            </p>
+          ) : (
+            <div className="divide-y divide-border rounded-xl border border-border bg-card">
+              {recentHistory.map((entry) => (
+                <div key={entry.id} className="flex items-center justify-between gap-3 px-4 py-3">
+                  <code className="min-w-0 flex-1 truncate font-mono text-[12.5px] text-foreground">
+                    {entry.command}
+                  </code>
+                  <div className="flex shrink-0 items-center gap-3">
+                    <span
+                      className={
+                        "font-mono text-[10.5px] uppercase " +
+                        (entry.status === "success" ? "text-success" : "text-critical")
+                      }
+                    >
+                      {entry.status}
+                    </span>
+                    <span className="w-16 text-right font-mono text-[11px] text-muted-foreground">
+                      {formatRelativeTime(entry.timestamp)}
+                    </span>
+                  </div>
+                </div>
+              ))}
             </div>
-          </section>
-
-          <section className="rounded-xl border border-border bg-card p-5 shadow-sm sm:p-6">
-            <h3 className="mb-4 text-lg font-semibold text-card-foreground">Execution Result</h3>
-            {apiError ? (
-              <div className="space-y-1">
-                <p className="text-sm text-destructive">{apiError}</p>
-              </div>
-            ) : result ? (
-              <div className="space-y-3">
-                <div className="flex items-center gap-2 text-sm">
-                  <span className="text-muted-foreground">Status:</span>
-                  <span className="font-medium text-primary">{result.status}</span>
-                </div>
-                <div className="text-sm">
-                  <span className="text-muted-foreground">Command:</span>{" "}
-                  <span className="font-mono text-card-foreground">{result.command}</span>
-                </div>
-                <div className="rounded-lg border border-border bg-background p-3">
-                  <p className="mb-1 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                    Result
-                  </p>
-                  <pre className="whitespace-pre-wrap font-mono text-sm text-card-foreground">
-                    {result.output}
-                  </pre>
-                </div>
-              </div>
-            ) : (
-              <p className="text-sm text-muted-foreground">No command executed yet.</p>
-            )}
-          </section>
-
-          <section>
-            <h3 className="mb-3 text-sm font-semibold uppercase tracking-wider text-muted-foreground">
-              Recent Commands
-            </h3>
-            <div className="rounded-xl border border-border bg-card p-4 shadow-sm">
-              <ul className="space-y-2">
-                {recent.map((item, index) => (
-                  <li
-                    key={`${item.command}-${index}`}
-                    className="flex items-center justify-between text-sm"
-                  >
-                    <span className="font-mono text-card-foreground">{item.command}</span>
-                    <span className="text-xs font-medium text-primary">{item.status}</span>
-                  </li>
-                ))}
-              </ul>
-            </div>
-          </section>
-        </div>
-      </main>
-    </div>
+          )}
+        </section>
+      </div>
+    </AppShell>
   );
 }
